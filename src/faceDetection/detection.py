@@ -29,9 +29,10 @@ class FaceDetector:
 
     def draw_faces(self, frame, bboxes):
         for box in bboxes:
-            x1, y1, x2, y2 = map(int, box["bbox"])
+            x1, y1, x2, y2 = map(int, box[:4])
+            score = float(box[4])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f"{box['score']:.2f}", (x1, y1 - 10),
+            cv2.putText(frame, f"{score:.2f}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         return frame
 
