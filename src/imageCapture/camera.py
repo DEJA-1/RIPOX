@@ -66,8 +66,11 @@ class CameraHandler:
         if not ret:
             print("Error while saving frame.")
             return
-        filename = os.path.join(
-            self._SAVE_DIR, f"wzorzec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+
+        filename = os.path.abspath(os.path.join(
+            self._SAVE_DIR,
+            f"wzorzec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        ))
         cv2.imwrite(filename, clean_frame)
         print(f"Saved: {filename}")
 
