@@ -71,7 +71,26 @@ class CameraHandler:
             self._SAVE_DIR,
             f"wzorzec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         ))
-        cv2.imwrite(filename, clean_frame)
+
+
+        try:
+            # Próba zapisu obrazu
+            is_saved = cv2.imwrite(filename, clean_frame)
+
+            if not is_saved:
+                # Rzucamy wyjątek, jeśli cv2.imwrite zwróciło False
+                raise ValueError(f"Nie udało się zapisać pliku {filename}. Sprawdź ścieżkę i uprawnienia.")
+
+            print(f"Pomyślnie zapisano obraz do {filename}")
+
+        except cv2.error as cv_err:
+            print(f"Błąd OpenCV: {cv_err}")
+        except IOError as io_err:
+            print(f"Błąd we/wy: {io_err} - problem z zapisem na dysku")
+        except Exception as e:
+            print(f"Inny nieoczekiwany błąd: {e}")
+
+
         print(f"Saved: {filename}")
 
     def _begin_analysis(self):
