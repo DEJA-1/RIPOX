@@ -23,10 +23,14 @@ class FaceDetModelLoader(BaseModelLoader):
         self.cfg['in_channel'] = self.meta_conf['in_channel']
         self.cfg['out_channel'] = self.meta_conf['out_channel']
         self.cfg['confidence_threshold'] = self.meta_conf['confidence_threshold']
-        
+
     def load_model(self):
         try:
-            model = torch.load(self.cfg['model_file_path'], weights_only=False)
+            model = torch.load(self.cfg['model_file_path'], map_location=torch.device('cpu'), weights_only=False)
+            if hasattr(model, 'module'):
+                model = model.module  # Extract the actual model from DataParallel wrapper
+            model = model.to('cpu')  # Ensure the model is on CPU
+            model.eval()  # Set the model to evaluation mode
         except Exception as e:
             logger.error('The model failed to load, please check the model path: %s!'
                          % self.cfg['model_file_path'])

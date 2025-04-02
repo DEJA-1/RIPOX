@@ -1,14 +1,142 @@
 import os
 import sys
 import cv2
+import numpy as np
+import glob
+import torch
 from src.faceDetection.face_sdk.face_sdk.core.model_loader.face_detection.FaceDetModelLoader import FaceDetModelLoader
 from src.faceDetection.face_sdk.face_sdk.core.model_handler.face_detection.FaceDetModelHandler import \
     FaceDetModelHandler
-
+from src.faceDetection.face_sdk.face_sdk.core.model_loader.face_alignment.FaceAlignModelLoader import \
+    FaceAlignModelLoader
+from src.faceDetection.face_sdk.face_sdk.core.model_handler.face_alignment.FaceAlignModelHandler import \
+    FaceAlignModelHandler
+from src.faceDetection.face_sdk.face_sdk.core.model_loader.face_recognition.FaceRecModelLoader import FaceRecModelLoader
+from src.faceDetection.face_sdk.face_sdk.core.model_handler.face_recognition.FaceRecModelHandler import \
+    FaceRecModelHandler
+from src.faceDetection.face_sdk.face_sdk.core.image_cropper.arcface_cropper.FaceRecImageCropper import \
+    FaceRecImageCropper
 
 sdk_root = os.path.join(os.path.dirname(__file__), "face_sdk", "face_sdk")
 if sdk_root not in sys.path:
     sys.path.insert(0, sdk_root)
+
+
+class FaceRecognition:
+    def __init__(self):
+        model_path = os.path.join(
+            os.path.dirname(__file__),
+            "face_sdk/face_sdk",
+            "models"
+        )
+
+        det_loader = FaceDetModelLoader(model_path, "face_detection", "face_detection_1.0")
+        det_model, det_cfg = det_loader.load_model()
+        self.det_handler = FaceDetModelHandler(det_model, "cpu", det_cfg)
+
+        align_loader = FaceAlignModelLoader(model_path, "face_alignment", "face_alignment_1.0")
+        align_model, align_cfg = align_loader.load_model()
+        align_model = align_model.to('cpu')
+        self.align_handler = FaceAlignModelHandler(align_model, "cpu", align_cfg)
+
+        rec_loader = FaceRecModelLoader(model_path, "face_recognition", "face_recognition_1.0")
+        rec_model, rec_cfg = rec_loader.load_model()
+        rec_model = rec_model.to('cpu')
+        self.rec_handler = FaceRecModelHandler(rec_model, "cpu", rec_cfg)
+
+        self.face_cropper = FaceRecImageCropper()
+        self.known_faces = {}
+
+    def _preprocess_face(self, frame, box):
+        try:
+            landmarks = self.align_handler.inference_on_image(frame, box)
+            landmarks_list = []
+            for (x, y) in landmarks.astype(np.int32):
+                landmarks_list.extend((x, y))
+
+            cropped_image = self.face_cropper.crop_image_by_mat(frame, landmarks_list)
+
+            if cropped_image is None or cropped_image.size == 0:
+                return None
+
+            if len(cropped_image.shape) == 2:
+                cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_GRAY2BGR)
+
+            cropped_image = cropped_image.astype('float32')
+            cropped_image = (cropped_image - np.min(cropped_image)) / (np.max(cropped_image) - np.min(cropped_image))
+
+
+            return cropped_image
+        except Exception as e:
+            print(f"Face processing error: {e}")
+            return None
+
+    def register_face(self, frame, name, box):
+        try:
+            cropped_face = self._preprocess_face(frame, box)
+            if cropped_face is None:
+                return False
+
+            embedding = self.rec_handler.inference_on_image(cropped_face)
+
+            if name not in self.known_faces:
+                self.known_faces[name] = []
+
+            if torch.is_tensor(embedding):
+                embedding = embedding.cpu().numpy()
+            elif isinstance(embedding, np.ndarray):
+                pass
+            else:
+                raise ValueError("Unknown embedding type")
+
+            self.known_faces[name].append(embedding)
+            print(f"Correctly registered face: {name}")
+            return True
+        except Exception as e:
+            print(f"Registering face error: {e}")
+            return False
+
+    def recognize_face(self, frame, box, threshold=0.9991):
+        try:
+            cropped_face = self._preprocess_face(frame, box)
+            if cropped_face is None:
+                return {"identity": "Unknown", "similarity": 0}
+
+            unknown_embedding = self.rec_handler.inference_on_image(cropped_face)
+            if torch.is_tensor(unknown_embedding):
+                unknown_embedding = unknown_embedding.cpu().numpy()
+
+            unknown_embedding = unknown_embedding / np.linalg.norm(unknown_embedding)
+
+            best_match = "Unknown"
+            max_similarity = 0
+
+            # DEBUG: Show all registered models
+            #print("\Registered models:", list(self.known_faces.keys()))
+
+            #print(f"Unknown embedding: {unknown_embedding[:5]}")
+            for name, embeddings in self.known_faces.items():
+                for i, known_embedding in enumerate(embeddings):
+                    #print(f"{name}_{i}: {known_embedding[:5]}")
+                    if torch.is_tensor(known_embedding):
+                        known_embedding = known_embedding.cpu().numpy()
+                    known_embedding = known_embedding / np.linalg.norm(known_embedding)
+
+                    similarity = np.dot(unknown_embedding, known_embedding.T)
+                    #print(f"Similarity with {name}_{i + 1}: {similarity:.4f}")
+
+                    if similarity > max_similarity:
+                        max_similarity = similarity
+                        best_match = name if similarity > threshold else "Unknown"
+
+            if max_similarity < threshold - 0.15:
+                best_match = "Unknown"
+
+            #print(f"FINAL MATCH: {best_match} (score: {max_similarity:.4f})\n")
+            return {"identity": best_match, "similarity": float(max_similarity)}
+        except Exception as e:
+            print(f"CRITICAL ERROR in recognition: {e}")
+            return {"identity": "Unknown", "similarity": 0}
 
 
 class FaceDetector:
@@ -18,72 +146,88 @@ class FaceDetector:
             "face_sdk/face_sdk",
             "models"
         )
-        model_category = "face_detection"
-        model_name = "face_detection_1.0"
 
-        loader = FaceDetModelLoader(model_path, model_category, model_name)
-        model, cfg = loader.load_model()
-        self.handler = FaceDetModelHandler(model, "cpu", cfg)
-        self.recognizer = None
+        det_loader = FaceDetModelLoader(model_path, "face_detection", "face_detection_1.0")
+        det_model, det_cfg = det_loader.load_model()
+        self.det_handler = FaceDetModelHandler(det_model, "cpu", det_cfg)
 
-    def _get_recognizer(self):
-        if self.recognizer is None:
-            from src.faceRecognition.face_recognition import FaceRecognition
-            self.recognizer = FaceRecognition()
-        return self.recognizer
+        self.recognizer = FaceRecognition()
+
+        self._load_known_faces()
+
+    def _load_known_faces(self):
+        known_faces_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'known_faces')
+        if os.path.exists(known_faces_dir):
+            print(f"Loading known faces from: {known_faces_dir}")
+            for img_path in glob.glob(os.path.join(known_faces_dir, "*.jpg")):
+                name = os.path.splitext(os.path.basename(img_path))[0]
+                print(f"Proccessing: {name}")
+
+                img = cv2.imread(img_path)
+                if img is not None:
+                    bboxes = self.detect_faces(img)
+                    if bboxes.size > 0:
+                        if self.recognizer.register_face(img, name, bboxes[0]):
+                            print(f"Registered: {name}")
+                        else:
+                            print(f"Could not register: {name}")
+                    else:
+                        print(f"Could not detect face: {name}")
+                else:
+                    print(f"Cannot load: {img_path}")
+        else:
+            print(f"No known_faces folder: {known_faces_dir}")
 
     def detect_faces(self, frame):
-        bboxes = self.handler.inference_on_image(frame)
-        return bboxes
-
-    def draw_faces(self, frame, bboxes):
-        for box in bboxes:
-            x1, y1, x2, y2, confidence = map(float, box[:5])
-            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-
-            face_crop = frame[y1:y2, x1:x2]
-            label = "Twarz"
-
-            if hasattr(self, 'recognizer') and self.recognizer is not None:
-                try:
-                    results = self._get_recognizer().recognize_face(frame, [box])
-                    if results and results[0]['identity']:
-                        identity = results[0]['identity']
-                        similarity = results[0]['similarity'] * 100
-                        label = f"{identity} ({similarity:.1f}%)"
-                    else:
-                        label = f"Nieznana ({confidence * 100:.1f}%)"
-                except Exception as e:
-                    print(f"Błąd rozpoznawania: {e}")
-                    label = f"Błąd ({confidence * 100:.1f}%)"
-            else:
-                label = f"Twarz ({confidence * 100:.1f}%)"
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
-        return frame
+        return self.det_handler.inference_on_image(frame)
 
     def analyze(self, frame):
         bboxes = self.detect_faces(frame)
-        return self.draw_faces(frame, bboxes)
+        if bboxes.size == 0:
+            return frame
+
+        for box in bboxes:
+            x1, y1, x2, y2, conf = map(int, box[:5])
+
+            result = self.recognizer.recognize_face(frame, box)
+
+            color = (0, 255, 0) if result['identity'] != "Unknown" else (0, 0, 255)
+            label = f"{result['identity']} ({result['similarity']:.2f})"
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, label, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+        return frame
 
 
 if __name__ == "__main__":
-    cap = cv2.VideoCapture(0)
+    print("System Initialization...")
     detector = FaceDetector()
 
+    print("Starting the camera...")
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Cannot open camera!")
+        exit()
+
+    print("Start processing...")
     while True:
         ret, frame = cap.read()
         if not ret:
+            print("Error while fetching frame")
             break
 
-        result = detector.analyze(frame)
-        cv2.imshow("Face Detection", result)
+        try:
+            result = detector.analyze(frame)
+            cv2.imshow("Face detection", result)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        except Exception as e:
+            print(f"Processing error: {e}")
             break
 
     cap.release()
     cv2.destroyAllWindows()
+    print("System closed")
