@@ -156,10 +156,10 @@ class FaceDetector:
         self._load_known_faces()
 
     def _load_known_faces(self):
-        known_faces_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'known_faces')
-        if os.path.exists(known_faces_dir):
-            print(f"Loading known faces from: {known_faces_dir}")
-            for img_path in glob.glob(os.path.join(known_faces_dir, "*.jpg")):
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'model'))
+        if os.path.exists(data_dir):
+            print(f"Loading known faces from: {data_dir}")
+            for img_path in glob.glob(os.path.join(data_dir, "*.jpg")):
                 name = os.path.splitext(os.path.basename(img_path))[0]
                 print(f"Proccessing: {name}")
 
@@ -176,7 +176,7 @@ class FaceDetector:
                 else:
                     print(f"Cannot load: {img_path}")
         else:
-            print(f"No known_faces folder: {known_faces_dir}")
+            print(f"No known_faces folder: {data_dir}")
 
     def detect_faces(self, frame):
         return self.det_handler.inference_on_image(frame)
