@@ -24,7 +24,7 @@ source "$ACTIVATE"
 
 echo "Instalacja zależności..."
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install --break-system-packages -r requirements.txt
 
 echo "Uruchamianie systemu..."
-python src/main.py
+python3 src/main.py
