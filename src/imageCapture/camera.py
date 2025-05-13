@@ -89,10 +89,13 @@ class CameraHandler:
             print(f"Saving error: {e}")
 
     def _begin_analysis(self):
-        if not self._face_detector:
+        if self._analyze_mode:
+            self._analyze_mode = False
+            print("Analysis mode: OFF")
+        else:
             self._face_detector = FaceDetector()
-        self._analyze_mode = not self._analyze_mode
-        print("Analysis mode:", "ON" if self._analyze_mode else "OFF")
+            self._analyze_mode = True
+            print("Analysis mode: ON")
 
     def _launch_configurator(self):
         config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'configurator', 'configurator.py'))

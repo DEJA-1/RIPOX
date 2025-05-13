@@ -1,9 +1,12 @@
+import json
 import os
 import sys
 import cv2
 import numpy as np
 import glob
 import torch
+
+from src.configurator.configurator import Configurator
 from src.faceDetection.face_sdk.face_sdk.core.model_loader.face_detection.FaceDetModelLoader import FaceDetModelLoader
 from src.faceDetection.face_sdk.face_sdk.core.model_handler.face_detection.FaceDetModelHandler import \
     FaceDetModelHandler
@@ -154,6 +157,7 @@ class FaceDetector:
         self.recognizer = FaceRecognition()
 
         self._load_known_faces()
+        self.user_config = Configurator.load_user_config()
 
     def _load_known_faces(self):
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'model'))
@@ -182,24 +186,53 @@ class FaceDetector:
         return self.det_handler.inference_on_image(frame)
 
     def analyze(self, frame):
+        crop_cfg = self.user_config.get("frame_crop", {})
+        x = crop_cfg.get("x", 0)
+        y = crop_cfg.get("y", 0)
+        w = crop_cfg.get("width", frame.shape[1])
+        h = crop_cfg.get("height", frame.shape[0])
+        frame = frame[y:y + h, x:x + w]
+
         bboxes = self.detect_faces(frame)
         if bboxes.size == 0:
             return frame
 
-        for box in bboxes:
-            x1, y1, x2, y2, conf = map(int, box[:5])
+        results = [self.recognizer.recognize_face(frame, box) for box in bboxes]
 
-            result = self.recognizer.recognize_face(frame, box)
+        frame = self.draw_faces(frame, bboxes, results)
 
-            color = (0, 255, 0) if result['identity'] != "Unknown" else (0, 0, 255)
-            label = f"{result['identity']} ({result['similarity']:.2f})"
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        if self.user_config.get("overlay", {}).get("show_lines", False):
+            h, w = frame.shape[:2]
+            cv2.line(frame, (0, 0), (w, h), (255, 0, 0), 1)
+            cv2.line(frame, (w, 0), (0, h), (255, 0, 0), 1)
 
         return frame
 
+    def draw_faces(self, frame, bboxes, recognition_results):
+        for box, result in zip(bboxes, recognition_results):
+            x1, y1, x2, y2 = map(int, box[:4])
+            color = (0, 255, 0) if result['identity'] != "Unknown" else (0, 0, 255)
+            label = f"{result['identity']} ({result['similarity']:.2f})"
+
+            if self.user_config.get("alert", {}).get("show_rectangle", True):
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+            if self.user_config.get("alert", {}).get("show_alert", False):
+                cv2.putText(frame, label, (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            if self.user_config.get("alert", {}).get("play_sound", False):
+                self._play_sound()
+        return frame
+
+    def _play_sound(self):
+        import platform
+        if platform.system() == "Windows":
+            import winsound
+            winsound.Beep(1000, 150)
+        else:
+            import os
+            os.system('printf "\\a"')
 
 if __name__ == "__main__":
     print("System Initialization...")

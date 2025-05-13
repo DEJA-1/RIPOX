@@ -1,11 +1,12 @@
-# src/configurator/configurator.py
 import sys
 import os
 import json
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSpinBox, QCheckBox, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QLabel,
+    QSpinBox, QCheckBox, QPushButton, QHBoxLayout
+)
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
-
 
 class Configurator(QWidget):
     def __init__(self):
@@ -14,6 +15,7 @@ class Configurator(QWidget):
         self.setFixedSize(300, 300)
 
         self.layout = QVBoxLayout()
+        self._load_config()
 
         self.layout.addWidget(QLabel("Kadrowanie (x, y, szer, wys):"))
         self.crop_x = QSpinBox()
@@ -22,29 +24,54 @@ class Configurator(QWidget):
         self.crop_h = QSpinBox()
         for box in [self.crop_x, self.crop_y, self.crop_w, self.crop_h]:
             box.setRange(0, 1920)
+        self.crop_x.setValue(self.cfg.get("frame_crop", {}).get("x", 0))
+        self.crop_y.setValue(self.cfg.get("frame_crop", {}).get("y", 0))
+        self.crop_w.setValue(self.cfg.get("frame_crop", {}).get("width", 0))
+        self.crop_h.setValue(self.cfg.get("frame_crop", {}).get("height", 0))
         row = QHBoxLayout()
         for widget in [self.crop_x, self.crop_y, self.crop_w, self.crop_h]:
             row.addWidget(widget)
         self.layout.addLayout(row)
 
+        # Confidence
         self.layout.addWidget(QLabel("Confidence threshold:"))
         self.confidence = QSpinBox()
         self.confidence.setRange(0, 100)
-        self.confidence.setValue(60)
+        default_conf = int(self.cfg.get("detection", {}).get("confidence_threshold", 0.6) * 100)
+        self.confidence.setValue(default_conf)
         self.layout.addWidget(self.confidence)
 
         self.rect_cb = QCheckBox("Ramka")
         self.alert_cb = QCheckBox("Alert na ekranie")
         self.sound_cb = QCheckBox("Dźwięk")
+
+        self.rect_cb.setChecked(self.cfg.get("alert", {}).get("show_rectangle", False))
+        self.alert_cb.setChecked(self.cfg.get("alert", {}).get("show_alert", False))
+        self.sound_cb.setChecked(self.cfg.get("alert", {}).get("play_sound", False))
+
         self.layout.addWidget(self.rect_cb)
         self.layout.addWidget(self.alert_cb)
         self.layout.addWidget(self.sound_cb)
+
+        self.lines_cb = QCheckBox("Linie pomocnicze")
+        self.lines_cb.setChecked(self.cfg.get("overlay", {}).get("show_lines", False))
+        self.layout.addWidget(self.lines_cb)
 
         self.save_btn = QPushButton("Zapisz")
         self.save_btn.clicked.connect(self.save_config)
         self.layout.addWidget(self.save_btn)
 
         self.setLayout(self.layout)
+
+    def _load_config(self):
+        if os.path.exists(CONFIG_PATH):
+            try:
+                with open(CONFIG_PATH, 'r') as f:
+                    self.cfg = json.load(f)
+            except Exception:
+                self.cfg = {}
+        else:
+            self.cfg = {}
 
     def save_config(self):
         config = {
@@ -61,16 +88,27 @@ class Configurator(QWidget):
                 "show_rectangle": self.rect_cb.isChecked(),
                 "show_alert": self.alert_cb.isChecked(),
                 "play_sound": self.sound_cb.isChecked()
+            },
+            "overlay": {
+                "show_lines": self.lines_cb.isChecked()
             }
         }
         with open(CONFIG_PATH, 'w') as f:
             json.dump(config, f, indent=4)
         self.close()
 
-if __name__ == "__main__":
-    import sys
-    from PySide6.QtWidgets import QApplication
+    @staticmethod
+    def load_user_config():
+        config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'config.json'))
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Could not load user config: {e}")
+        return {}
 
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = Configurator()
     window.show()
