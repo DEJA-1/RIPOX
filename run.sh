@@ -6,17 +6,20 @@ OS="$(uname -s)"
 
 if [ "$OS" == "Darwin" ]; then
     ACTIVATE=".venv/bin/activate"
+    PYTHON=python3
 elif [ "$OS" == "Linux" ]; then
     ACTIVATE=".venv/bin/activate"
+    PYTHON=python3
 elif [[ "$OS" == MINGW* || "$OS" == CYGWIN* || "$OS" == MSYS* ]]; then
     ACTIVATE=".venv/Scripts/activate"
+    PYTHON=python
 else
     exit 1
 fi
 
 if [ ! -d ".venv" ]; then
     echo "Tworzenie środowiska virtualenv..."
-    python3 -m venv .venv
+    $PYTHON -m venv .venv
 fi
 
 echo "Aktywacja środowiska..."
@@ -27,4 +30,4 @@ pip install --upgrade pip
 pip install --break-system-packages -r requirements.txt
 
 echo "Uruchamianie systemu..."
-python3 src/main.py
+$PYTHON src/main.py
