@@ -1,0 +1,16 @@
+{
+    "frame_crop": {
+        "x": 19,
+        "y": 19,
+        "width": 10,
+        "height": 10
+    },
+    "detection": {
+        "confidence_threshold": 0.54
+    },
+    "alert": {
+        "show_rectangle": true,
+        "show_alert": true,
+        "play_sound": false
+    }
+}

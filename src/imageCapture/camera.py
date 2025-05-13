@@ -2,13 +2,16 @@ import cv2
 import os
 from datetime import datetime
 from src.faceDetection.detection import FaceDetector
+import subprocess
+import platform
 
 class CameraHandler:
     _SAVE_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'model')
     _HELP_TEXT = [
         "Make photo - 's'",
         "Quit - 'q'",
-        "Begin analysis - 'a'"
+        "Begin analysis - 'a'",
+        "Open configurator - 'c'"
     ]
     WINDOW_NAME = "Preview"
     FRAME_WIDTH = 1280
@@ -51,6 +54,8 @@ class CameraHandler:
             self._save_frame()
         elif key == ord('a'):
             self._begin_analysis()
+        elif key == ord('c'):
+            self._launch_configurator()
 
     def _cleanup(self):
         if hasattr(self, 'cap') and self.cap.isOpened():
@@ -88,6 +93,17 @@ class CameraHandler:
             self._face_detector = FaceDetector()
         self._analyze_mode = not self._analyze_mode
         print("Analysis mode:", "ON" if self._analyze_mode else "OFF")
+
+    def _launch_configurator(self):
+        config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'configurator', 'configurator.py'))
+        print(f"Opening configurator: {config_path}")
+        try:
+            if platform.system() == "Windows":
+                subprocess.Popen(['python', config_path], shell=True)
+            else:
+                subprocess.Popen(['python3', config_path])
+        except Exception as e:
+            print(f"Failed to launch configurator: {e}")
 
 if __name__ == "__main__":
     camera = CameraHandler()
