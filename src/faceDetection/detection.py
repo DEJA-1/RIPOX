@@ -65,8 +65,7 @@ class FaceRecognition:
             if len(cropped_image.shape) == 2:
                 cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_GRAY2BGR)
 
-            cropped_image = cropped_image.astype('float32')
-            cropped_image = (cropped_image - np.min(cropped_image)) / (np.max(cropped_image) - np.min(cropped_image))
+            cropped_image = cropped_image.astype('float32') / 255.0
 
 
             return cropped_image
@@ -99,7 +98,7 @@ class FaceRecognition:
             print(f"Registering face error: {e}")
             return False
 
-    def recognize_face(self, frame, box, threshold=0.9991):
+    def recognize_face(self, frame, box, threshold):
         try:
             cropped_face = self._preprocess_face(frame, box)
             if cropped_face is None:
@@ -109,34 +108,32 @@ class FaceRecognition:
             if torch.is_tensor(unknown_embedding):
                 unknown_embedding = unknown_embedding.cpu().numpy()
 
-            unknown_embedding = unknown_embedding / np.linalg.norm(unknown_embedding)
+            unknown_embedding = _normalize(unknown_embedding)
 
             best_match = "Unknown"
             max_similarity = 0
 
-            # DEBUG: Show all registered models
-            #print("\Registered models:", list(self.known_faces.keys()))
-
-            #print(f"Unknown embedding: {unknown_embedding[:5]}")
             for name, embeddings in self.known_faces.items():
-                for i, known_embedding in enumerate(embeddings):
-                    #print(f"{name}_{i}: {known_embedding[:5]}")
+                for known_embedding in embeddings:
                     if torch.is_tensor(known_embedding):
                         known_embedding = known_embedding.cpu().numpy()
-                    known_embedding = known_embedding / np.linalg.norm(known_embedding)
+                    known_embedding = _normalize(known_embedding)
 
                     similarity = np.dot(unknown_embedding, known_embedding.T)
-                    #print(f"Similarity with {name}_{i + 1}: {similarity:.4f}")
 
                     if similarity > max_similarity:
                         max_similarity = similarity
-                        best_match = name if similarity > threshold else "Unknown"
+                        best_match = name
 
-            if max_similarity < threshold - 0.15:
-                best_match = "Unknown"
+            if max_similarity >= threshold:
+                identity = best_match
+            else:
+                identity = "Unknown"
 
-            #print(f"FINAL MATCH: {best_match} (score: {max_similarity:.4f})\n")
-            return {"identity": best_match, "similarity": float(max_similarity)}
+            print(f"Best match: {identity}, Similarity: {max_similarity:.4f}, Threshold: {threshold}")
+
+            return {"identity": identity, "similarity": float(max_similarity)}
+
         except Exception as e:
             print(f"CRITICAL ERROR in recognition: {e}")
             return {"identity": "Unknown", "similarity": 0}
@@ -197,7 +194,9 @@ class FaceDetector:
         if bboxes.size == 0:
             return frame
 
-        results = [self.recognizer.recognize_face(frame, box) for box in bboxes]
+        threshold = float(self.user_config.get("detection", {}).get("confidence_threshold", 0.9991))
+
+        results = [self.recognizer.recognize_face(frame, box, threshold) for box in bboxes]
 
         frame = self.draw_faces(frame, bboxes, results)
 
@@ -264,3 +263,8 @@ if __name__ == "__main__":
     cap.release()
     cv2.destroyAllWindows()
     print("System closed")
+
+
+def _normalize(vec):
+    norm = np.linalg.norm(vec)
+    return vec if norm == 0 else vec / norm

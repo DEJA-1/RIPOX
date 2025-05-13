@@ -71,7 +71,9 @@ class CameraHandler:
         return self.cap.isOpened()
 
     def _save_frame(self):
-        if self.current_frame is None:
+        # Pobierz nową, czystą klatkę z kamery (bez helperów)
+        ret, raw_frame = self.cap.read()
+        if not ret:
             print("No frame to save.")
             return
 
@@ -81,7 +83,7 @@ class CameraHandler:
         )
 
         try:
-            is_saved = cv2.imwrite(filename, self.current_frame)
+            is_saved = cv2.imwrite(filename, raw_frame)
             if not is_saved:
                 raise ValueError(f"Cannot save file {filename}")
             print(f"Saved file to {filename}")

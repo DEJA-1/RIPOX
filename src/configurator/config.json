@@ -1,12 +1,12 @@
 {
     "frame_crop": {
-        "x": 400,
-        "y": 300,
+        "x": 0,
+        "y": 0,
         "width": 1400,
         "height": 1200
     },
     "detection": {
-        "confidence_threshold": 0.9
+        "confidence_threshold": 0.9994
     },
     "alert": {
         "show_rectangle": true,

@@ -3,10 +3,11 @@ import os
 import json
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel,
-    QSpinBox, QCheckBox, QPushButton, QHBoxLayout
+    QSpinBox, QCheckBox, QPushButton, QHBoxLayout, QDoubleSpinBox
 )
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+
 
 class Configurator(QWidget):
     def __init__(self):
@@ -33,12 +34,13 @@ class Configurator(QWidget):
             row.addWidget(widget)
         self.layout.addLayout(row)
 
-        # Confidence
         self.layout.addWidget(QLabel("Confidence threshold:"))
-        self.confidence = QSpinBox()
-        self.confidence.setRange(0, 100)
-        default_conf = int(self.cfg.get("detection", {}).get("confidence_threshold", 0.6) * 100)
-        self.confidence.setValue(default_conf)
+        self.confidence = QDoubleSpinBox()
+        self.confidence.setRange(0.0001, 1.0000)
+        self.confidence.setDecimals(4)
+        self.confidence.setSingleStep(0.0001)
+        default_conf = self.cfg.get("detection", {}).get("confidence_threshold", 0.9991)
+        self.confidence.setValue(float(default_conf))
         self.layout.addWidget(self.confidence)
 
         self.rect_cb = QCheckBox("Ramka")
@@ -82,7 +84,7 @@ class Configurator(QWidget):
                 "height": self.crop_h.value()
             },
             "detection": {
-                "confidence_threshold": self.confidence.value() / 100.0
+                "confidence_threshold": round(self.confidence.value(), 4)
             },
             "alert": {
                 "show_rectangle": self.rect_cb.isChecked(),
@@ -107,6 +109,7 @@ class Configurator(QWidget):
             except Exception as e:
                 print(f"Could not load user config: {e}")
         return {}
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
