@@ -6,7 +6,7 @@
         "height": 1200
     },
     "detection": {
-        "confidence_threshold": 0.9994
+        "confidence_threshold": 0.75
     },
     "alert": {
         "show_rectangle": true,
