@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 import glob
 import torch
+import pygame
+from sympy import false
 
 from src.configurator.configurator import Configurator
 from src.faceDetection.face_sdk.face_sdk.core.model_loader.face_detection.FaceDetModelLoader import FaceDetModelLoader
@@ -66,7 +68,6 @@ class FaceRecognition:
                 cropped_image = cv2.cvtColor(cropped_image, cv2.COLOR_GRAY2BGR)
 
             cropped_image = cropped_image.astype('float32') / 255.0
-
 
             return cropped_image
         except Exception as e:
@@ -151,6 +152,8 @@ class FaceRecognition:
 def _normalize(vec):
     norm = np.linalg.norm(vec)
     return vec if norm == 0 else vec / norm
+
+
 class FaceDetector:
     def __init__(self):
         model_path = os.path.join(
@@ -167,6 +170,7 @@ class FaceDetector:
 
         self._load_known_faces()
         self.user_config = Configurator.load_user_config()
+        self._last_recognized = False
 
     def _load_known_faces(self):
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'model'))
@@ -220,8 +224,11 @@ class FaceDetector:
         return frame
 
     def draw_faces(self, frame, bboxes, recognition_results):
+        any_recognized = false
+
         for box, result in zip(bboxes, recognition_results):
             x1, y1, x2, y2 = map(int, box[:4])
+            recognized = result['identity'] != "Unknown"
             color = (0, 255, 0) if result['identity'] != "Unknown" else (0, 0, 255)
             label = f"{result['identity']} ({result['similarity']:.4f})"
 
@@ -232,18 +239,25 @@ class FaceDetector:
                 cv2.putText(frame, label, (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            if self.user_config.get("alert", {}).get("play_sound", False):
-                self._play_sound()
-        return frame
+            if recognized:
+                any_recognized = True
+
+            if any_recognized and not self._last_recognized:
+                if self.user_config.get("alert", {}).get("play_sound", False):
+                    self._play_sound()
+
+            self._last_recognized = any_recognized
+
+            return frame
 
     def _play_sound(self):
-        import platform
-        if platform.system() == "Windows":
-            import winsound
-            winsound.Beep(1000, 150)
-        else:
-            import os
-            os.system('printf "\\a"')
+        sound_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'utils', 'detect.mp3'
+        ))
+        pygame.mixer.init()
+        pygame.mixer.music.load(sound_path)
+        pygame.mixer.music.play()
+
 
 if __name__ == "__main__":
     print("System Initialization...")
