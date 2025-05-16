@@ -52,6 +52,7 @@ class CameraHandler:
             self._running = False
         elif key == ord('s'):
             self._save_frame()
+            self._save_frame_with_glasses()
         elif key == ord('a'):
             self._begin_analysis()
         elif key == ord('c'):
@@ -87,6 +88,35 @@ class CameraHandler:
             if not is_saved:
                 raise ValueError(f"Cannot save file {filename}")
             print(f"Saved file to {filename}")
+        except Exception as e:
+            print(f"Saving error: {e}")
+    def _save_frame_with_glasses(self):
+        ret, raw_frame = self.cap.read()
+        if not ret:
+            print("No frame to save.")
+            return
+
+        if self._face_detector is None:
+            self._face_detector = FaceDetector()
+
+        bboxes = self._face_detector.detect_faces(raw_frame)
+
+        if bboxes is None or len(bboxes) == 0:
+            print("No faces detected.")
+            return
+
+        frame_with_glasses = self._face_detector.draw_glasses(raw_frame.copy(), bboxes)
+
+        filename = os.path.join(
+            self._SAVE_DIR,
+            f"wzorzec_glasses_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        )
+
+        try:
+            is_saved = cv2.imwrite(filename, frame_with_glasses)
+            if not is_saved:
+                raise ValueError(f"Cannot save file {filename}")
+            print(f"Saved file with glasses to {filename}")
         except Exception as e:
             print(f"Saving error: {e}")
 
