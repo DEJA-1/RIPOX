@@ -154,6 +154,8 @@ class FaceRecognition:
 def _normalize(vec):
     norm = np.linalg.norm(vec)
     return vec if norm == 0 else vec / norm
+
+
 class FaceDetector:
     def __init__(self):
         model_path = os.path.join(
