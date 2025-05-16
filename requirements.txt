@@ -3,3 +3,4 @@ torch
 torchvision
 scikit-image
 PySide6
+pygame
